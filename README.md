@@ -60,8 +60,10 @@ pnpm build                     # instaladores (deb, rpm, AppImage, MSI, NSIS)
 | --- | --- |
 | PTY, sesiones, splits, Command Input, bloques, TTY automático | Hecho y probado en Linux (tests + app en Xvfb) |
 | Integración bash, zsh, fish | Hecho y probado con shells reales |
-| Integración PowerShell y CMD | Implementado, **sin verificar**: se valida en la CI de Windows |
-| Job Objects / ConPTY en Windows | Implementado, **sin compilar todavía en Windows** |
+| PowerShell 7 y 5.1 en Windows | Probado en CI (`windows-2025`, `mksh-probe`): bloques, códigos de salida y cwd |
+| CMD en Windows | Probado en CI: bloques y salida; sin código de salida (limitación de CMD) |
+| ConPTY y Job Objects | Probado en CI: E/S por ConPTY, respuesta a la consulta de cursor inicial, cierre de nietos |
+| App de escritorio en Windows | Compila y pasa pruebas en CI; **interfaz sin probar visualmente** en WebView2 |
 | Bloques en SSH (bash/zsh remotos) | Hecho y probado contra un `sshd` local |
 | Historial SQLite, atajos configurables | Hecho |
 | Persistencia de sesiones, daemon `mkshd`, temas en UI | Fase 3 |
