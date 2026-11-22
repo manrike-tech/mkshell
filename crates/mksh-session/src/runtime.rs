@@ -140,7 +140,15 @@ impl PaneRuntime {
         assets: Option<&IntegrationAssets>,
         mut opts: PaneOptions,
     ) -> Result<Arc<Self>> {
-        let plan = prepare_launch(&profile, assets, &|k| std::env::var(k).ok());
+        // El entorno del perfil manda sobre el heredado (HOME, ZDOTDIR, PROMPT…).
+        let lookup = |k: &str| {
+            profile
+                .env
+                .get(k)
+                .cloned()
+                .or_else(|| std::env::var(k).ok())
+        };
+        let plan = prepare_launch(&profile, assets, &lookup);
         let cwd = opts
             .cwd
             .take()
@@ -188,10 +196,12 @@ impl PaneRuntime {
         let gate = self.gate.clone();
         let pane = self.id;
         let profile_id = self.profile.id.clone();
+        let dsr_pty = self.pty.clone();
 
         std::thread::Builder::new()
             .name(format!("mksh-pty-read-{pane}"))
             .spawn(move || {
+                let mut startup = StartupDsr::new();
                 // Metadatos de bloques abiertos para el historial.
                 let mut open: HashMap<BlockId, OpenMeta> = HashMap::new();
                 let mut buf = vec![0u8; 64 * 1024];
@@ -200,7 +210,17 @@ impl PaneRuntime {
                         Ok(0) | Err(_) => break,
                         Ok(n) => n,
                     };
-                    let outputs = tracker.lock().feed(&buf[..n]);
+                    let chunk = startup.filter(&buf[..n], |reply| {
+                        let _ = dsr_pty.write_all(reply);
+                    });
+                    let outputs = {
+                        let mut t = tracker.lock();
+                        let o = t.feed(&chunk);
+                        if t.has_prompted() {
+                            startup.close();
+                        }
+                        o
+                    };
                     let mut bytes = 0usize;
                     {
                         let mut slot = slot.lock();
@@ -403,6 +423,66 @@ fn track_block(
     }
 }
 
+/// Respuesta a la consulta de posición del cursor (`CSI 6 n`) durante el
+/// arranque del shell.
+///
+/// ConPTY la envía al crearse y no deja arrancar al proceso hasta recibir la
+/// respuesta. Mientras no hay prompt (y aún no hay UI que conteste), el núcleo
+/// responde «fila 1, columna 1» y retira la consulta del flujo para que la UI
+/// no responda por segunda vez. Después de arrancar, contestan los terminales
+/// de la UI como en cualquier emulador.
+struct StartupDsr {
+    open: bool,
+    seen: usize,
+}
+
+impl StartupDsr {
+    const QUERY: &'static [u8] = b"\x1b[6n";
+    const REPLY: &'static [u8] = b"\x1b[1;1R";
+    /// Bytes de arranque tras los que se deja de vigilar.
+    const LIMIT: usize = 64 * 1024;
+
+    fn new() -> Self {
+        Self {
+            open: true,
+            seen: 0,
+        }
+    }
+
+    fn close(&mut self) {
+        self.open = false;
+    }
+
+    fn filter<'a>(
+        &mut self,
+        data: &'a [u8],
+        mut reply: impl FnMut(&[u8]),
+    ) -> std::borrow::Cow<'a, [u8]> {
+        if !self.open {
+            return data.into();
+        }
+        self.seen += data.len();
+        if self.seen > Self::LIMIT {
+            self.open = false;
+        }
+        if !data.windows(Self::QUERY.len()).any(|w| w == Self::QUERY) {
+            return data.into();
+        }
+        let mut out = Vec::with_capacity(data.len());
+        let mut i = 0;
+        while i < data.len() {
+            if data[i..].starts_with(Self::QUERY) {
+                reply(Self::REPLY);
+                i += Self::QUERY.len();
+            } else {
+                out.push(data[i]);
+                i += 1;
+            }
+        }
+        out.into()
+    }
+}
+
 /// Codifica una línea para el shell: *bracketed paste* si el shell lo activó
 /// (el texto multilínea se inserta completo) y Enter (`\r`).
 fn encode_line(text: &str, bracketed_paste: bool) -> Vec<u8> {
@@ -432,6 +512,21 @@ fn dirs_home() -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn answers_startup_cursor_query_once_per_occurrence() {
+        let mut dsr = StartupDsr::new();
+        let mut replies = 0;
+        let out = dsr.filter(b"\x1b[6nhola\x1b[6n", |r| {
+            assert_eq!(r, b"\x1b[1;1R");
+            replies += 1;
+        });
+        assert_eq!(&*out, b"hola");
+        assert_eq!(replies, 2);
+        dsr.close();
+        let out = dsr.filter(b"\x1b[6n", |_| panic!("cerrado"));
+        assert_eq!(&*out, b"\x1b[6n");
+    }
 
     #[test]
     fn encodes_lines() {

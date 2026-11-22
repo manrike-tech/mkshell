@@ -293,6 +293,11 @@ impl Tracker {
         self.top().paste.unwrap_or(self.bracketed_paste)
     }
 
+    /// `true` cuando el shell raíz ya dibujó su primer prompt con marcas.
+    pub fn has_prompted(&self) -> bool {
+        self.frames[0].state != FrameState::Startup
+    }
+
     /// Directorio del shell raíz (para abrir paneles nuevos en el mismo sitio).
     pub fn root_cwd(&self) -> Option<&str> {
         self.frames[0].cwd.as_deref()

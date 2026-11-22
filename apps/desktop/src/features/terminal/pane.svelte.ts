@@ -528,6 +528,12 @@ export class PaneController {
       await api.writeInput(this.id, `${t}\r`);
       return;
     }
+    // Antes del primer prompt (p. ej. una pregunta de los ficheros de arranque
+    // del shell) el texto es entrada estándar, no un comando.
+    if (!this.ready && !this.running) {
+      await api.writeInput(this.id, `${t}\r`);
+      return;
+    }
     if (t.trim().length === 0) return;
     if (!this.running) {
       this.history = [t, ...this.history.filter((h) => h !== t)].slice(0, 1000);

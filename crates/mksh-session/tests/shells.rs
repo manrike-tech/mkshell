@@ -54,6 +54,9 @@ impl Harness {
         profile
             .env
             .insert("HOME".into(), home.to_string_lossy().into_owned());
+        // El compinit global de algunas distros pregunta por «directorios
+        // inseguros» y bloquea el arranque; la prueba no depende del sistema.
+        std::fs::write(home.join(".zshenv"), "skip_global_compinit=1\n").ok()?;
         profile.env.insert(
             "XDG_CONFIG_HOME".into(),
             home.join(".config").to_string_lossy().into_owned(),

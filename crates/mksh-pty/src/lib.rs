@@ -354,6 +354,11 @@ mod tests {
         };
         let (proc_, reader) = PtyProcess::spawn(&spec).unwrap();
         let mut out = Output::new(reader);
+        // ConPTY pide la posición del cursor y espera respuesta antes de arrancar.
+        let text = out.wait_until(|t| t.contains("mkshell-conpty") || t.contains("\x1b[6n"));
+        if text.contains("\x1b[6n") {
+            proc_.write_all(b"\x1b[1;1R").unwrap();
+        }
         let text = out.wait_until(|t| t.contains("mkshell-conpty"));
         assert!(text.contains("mkshell-conpty"), "salida: {text:?}");
         proc_.write_all(b"exit 7\r").unwrap();
