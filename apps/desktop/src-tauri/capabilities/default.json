@@ -1,0 +1,27 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos mínimos de la ventana principal: solo los comandos del núcleo de MKShell, portapapeles de texto y diálogo de guardado.",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "clipboard-manager:allow-read-text",
+    "clipboard-manager:allow-write-text",
+    "allow-get-bootstrap",
+    "allow-create-session",
+    "allow-close-session",
+    "allow-rename-session",
+    "allow-split-pane",
+    "allow-close-pane",
+    "allow-set-split-ratio",
+    "allow-attach-pane",
+    "allow-run-command",
+    "allow-write-input",
+    "allow-resize-pane",
+    "allow-ack-output",
+    "allow-history",
+    "allow-complete-path",
+    "allow-enable-blocks",
+    "allow-save-text-file"
+  ]
+}
