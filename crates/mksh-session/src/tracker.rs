@@ -115,9 +115,15 @@ enum Marker {
 
 #[derive(Debug, Clone, PartialEq)]
 enum Hit {
-    Osc { marker: Marker, bell: bool },
+    Osc {
+        marker: Marker,
+        bell: bool,
+    },
     AltScreen(bool),
     BracketedPaste(bool),
+    /// Cursor a la columna 1 de otra fila (`CSI fila;1 H`, `CSI E`). ConPTY
+    /// redibuja así algunos saltos de línea en lugar de enviar `\n`.
+    LineStart,
 }
 
 /// Recolector de secuencias relevantes para `vte`.
@@ -140,6 +146,17 @@ impl vte::Perform for Collector {
         _ignore: bool,
         action: char,
     ) {
+        if intermediates.is_empty() {
+            let col = params
+                .iter()
+                .nth(1)
+                .and_then(|p| p.first().copied())
+                .unwrap_or(1);
+            if matches!(action, 'H' | 'f') && col <= 1 || action == 'E' {
+                self.hits.push(Hit::LineStart);
+            }
+            return;
+        }
         if intermediates != b"?" || !(action == 'h' || action == 'l') {
             return;
         }
@@ -411,6 +428,7 @@ impl Tracker {
             }
             self.parser.advance(&mut self.collector, &[b]);
             let hits = std::mem::take(&mut self.collector.hits);
+            let mut line_start = false;
             for hit in hits {
                 match hit {
                     Hit::Osc { marker, bell } => {
@@ -438,6 +456,7 @@ impl Tracker {
                         out.push(TrackerOutput::Event(PaneEvent::AltScreen { on: false }));
                     }
                     Hit::AltScreen(_) => {}
+                    Hit::LineStart => line_start = true,
                     Hit::BracketedPaste(on) => {
                         self.bracketed_paste = on;
                         let top = self.top_mut();
@@ -452,8 +471,10 @@ impl Tracker {
                     }
                 }
             }
+            // Shell sin marca C (CMD): la salida empieza tras el salto de línea
+            // del eco, que ConPTY puede enviar como `\n` o como movimiento de cursor.
             if self.infer_c
-                && b == b'\n'
+                && (b == b'\n' || line_start)
                 && self.top().state == FrameState::Input
                 && pending_st.is_none()
             {

@@ -87,6 +87,9 @@ jobs:
       - name: mksh-probe (Linux)
         if: runner.os == 'Linux'
         run: |
+          # El compinit global de Ubuntu pregunta por directorios «inseguros» del
+          # runner y bloquea zsh; en un equipo normal no ocurre.
+          echo 'skip_global_compinit=1' >> ~/.zshenv
           cargo run -q -p mksh-probe -- --shell bash
           cargo run -q -p mksh-probe -- --shell zsh
           cargo run -q -p mksh-probe -- --shell fish

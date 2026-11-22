@@ -318,3 +318,30 @@ fn percent_decoding() {
     assert_eq!(percent_decode("/bad%2"), "/bad%2");
     assert_eq!(percent_decode("/x%ZZ"), "/x%ZZ");
 }
+
+#[test]
+fn cmd_via_conpty_line_break_as_cursor_move() {
+    // Secuencia real de CMD bajo ConPTY (CI windows-2025): el salto de línea
+    // tras el eco llega como `CSI 7;1 H`.
+    let st = "\x1b\\";
+    let prompt = format!(
+        "\x1b]133;D{st}\x1b]133;A;mkc=0{st}\x1b]9;9;C:\\Users\\r{st}C:\\Users\\r>\x1b]133;B{st}"
+    );
+    let mut t = Tracker::new();
+    t.feed(prompt.as_bytes());
+    t.expect_command("cmd /c exit 3".into(), Origin::User);
+    let out = t.feed(format!("\x1b[?25lcmd /c exit 3\x1b[7;1H\x1b[?25h{prompt}").as_bytes());
+    let ev = events(&out);
+    let st_ = started(&ev);
+    assert_eq!(st_.len(), 1, "{ev:#?}");
+    assert_eq!(st_[0].2.as_deref(), Some("cmd /c exit 3"));
+    assert_eq!(finished(&ev), vec![(st_[0].0, None)]);
+    // El movimiento de cursor de la propia línea de comandos (columna > 1) no cuenta.
+    let mut t = Tracker::new();
+    t.feed(prompt.as_bytes());
+    t.expect_command("dir".into(), Origin::User);
+    let out = t.feed(b"\x1b[3;20Hdir\r\nfile\r\n");
+    let ev = events(&out);
+    let st_ = started(&ev);
+    assert_eq!(output_text(&out, st_[0].0), "file\r\n");
+}

@@ -108,8 +108,13 @@ fn default_commands(kind: ShellKind) -> Vec<(String, Option<i32>)> {
         fail_code = None;
     }
     let cd = if cfg!(windows) { "cd \\" } else { "cd /" };
+    let ok_code = if kind == ShellKind::Cmd {
+        None
+    } else {
+        Some(0)
+    };
     vec![
-        ("echo mkshell-probe".into(), Some(0)),
+        ("echo mkshell-probe".into(), ok_code),
         (fail_cmd, fail_code),
         (cd.into(), None),
     ]
@@ -285,6 +290,24 @@ fn run() -> Result<bool, String> {
              filtrando las secuencias: prueba con un conpty.dll reciente junto al ejecutable.",
             args.timeout
         ));
+        // Lo que escribió el shell al arrancar suele explicar el bloqueo
+        // (una pregunta de compinit, un error en el rc…).
+        let startup: Vec<u8> = probe
+            .log
+            .iter()
+            .filter_map(|f| match f {
+                PaneFrame::Data(d) if d.region == Region::Startup => Some(d.bytes.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        let text = visible_text(&startup);
+        if !text.is_empty() {
+            report.notes.push(format!(
+                "salida de arranque: {}",
+                text.chars().take(400).collect::<String>()
+            ));
+        }
         return finish(report, &args, &rt);
     }
     report.prompt_detected_ms = Some(started.elapsed().as_millis());
