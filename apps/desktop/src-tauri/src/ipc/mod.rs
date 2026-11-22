@@ -6,7 +6,7 @@
 
 use crate::state::AppContext;
 use mksh_config::{Appearance, TerminalSettings};
-use mksh_core::command::{CommandId, COMMANDS};
+use mksh_core::command::{COMMANDS, CommandId};
 use mksh_core::{Origin, PaneId, SessionId, SplitDirection, SplitId};
 use mksh_session::{PaneFrame, SessionInfo};
 use mksh_shell::Profile;
@@ -15,8 +15,8 @@ use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri::State;
+use tauri::ipc::{Channel, InvokeResponseBody};
 use tauri_plugin_dialog::DialogExt;
 
 type Res<T> = Result<T, String>;
@@ -273,11 +273,7 @@ fn complete_in(base: &Path, prefix: &str, limit: usize) -> Vec<String> {
         }
     } else {
         let p = PathBuf::from(shown_dir);
-        if p.is_absolute() {
-            p
-        } else {
-            base.join(p)
-        }
+        if p.is_absolute() { p } else { base.join(p) }
     };
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return Vec::new();
@@ -322,9 +318,11 @@ mod tests {
             complete_in(&dir, "src/", 10),
             vec!["src/main.rs".to_string(), format!("src/sub{sep}")]
         );
-        assert!(complete_in(&dir, "", 10)
-            .iter()
-            .all(|e| !e.starts_with('.')));
+        assert!(
+            complete_in(&dir, "", 10)
+                .iter()
+                .all(|e| !e.starts_with('.'))
+        );
         assert_eq!(complete_in(&dir, ".h", 10), vec![".hidden".to_string()]);
         std::fs::remove_dir_all(dir).ok();
     }

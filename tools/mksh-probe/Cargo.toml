@@ -1,7 +1,11 @@
 [package]
 name = "mksh-probe"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
 
 [dependencies]
 mksh-core = { version = "0.1.0", path = "../../crates/mksh-core" }

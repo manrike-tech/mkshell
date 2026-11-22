@@ -2,7 +2,7 @@
 
 use mksh_config::{AppState, Config, Paths};
 use mksh_session::{BlockRecord, ManagerOptions, SessionInfo, SessionManager};
-use mksh_shell::{detect_profiles, slug, IntegrationAssets, Profile, ShellKind};
+use mksh_shell::{IntegrationAssets, Profile, ShellKind, detect_profiles, slug};
 use mksh_store::{History, NewEntry};
 use parking_lot::Mutex;
 use std::sync::Arc;
