@@ -405,7 +405,7 @@ impl Tracker {
                 last_esc = Some(i);
             }
             self.parser.advance(&mut self.collector, &[b]);
-            let hits: Vec<Hit> = self.collector.hits.drain(..).collect();
+            let hits = std::mem::take(&mut self.collector.hits);
             for hit in hits {
                 match hit {
                     Hit::Osc { marker, bell } => {
