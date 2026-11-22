@@ -16,6 +16,7 @@ jobs:
       matrix:
         os: [ubuntu-24.04, windows-2025]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -60,6 +61,11 @@ jobs:
         shell: pwsh
         run: |
           cargo run -q -p mksh-probe -- --list
-          cargo run -q -p mksh-probe -- --shell pwsh --json
-          cargo run -q -p mksh-probe -- --shell powershell --json
-          cargo run -q -p mksh-probe -- --shell cmd --json
+          $failed = 0
+          foreach ($shell in @('pwsh', 'windows-powershell', 'cmd')) {
+            Write-Host "::group::mksh-probe $shell"
+            cargo run -q -p mksh-probe -- --shell $shell --dump
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+            Write-Host "::endgroup::"
+          }
+          exit $failed

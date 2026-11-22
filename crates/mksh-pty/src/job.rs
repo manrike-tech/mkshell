@@ -28,7 +28,7 @@ impl Job {
     pub fn for_child(child: &(dyn Child + Send + Sync)) -> io::Result<Self> {
         let process = child
             .as_raw_handle()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "sin handle de proceso"))?;
+            .ok_or_else(|| io::Error::other("sin handle de proceso"))?;
         // SAFETY: parámetros nulos válidos según la API; se comprueban los retornos.
         unsafe {
             let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());

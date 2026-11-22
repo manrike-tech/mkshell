@@ -34,8 +34,8 @@ bloques, códigos de salida y cwd, sin interfaz:
 
 ```powershell
 cargo run -p mksh-probe -- --list
-cargo run -p mksh-probe -- --shell pwsh
-cargo run -p mksh-probe -- --shell powershell
+cargo run -p mksh-probe -- --shell pwsh                 # PowerShell 7
+cargo run -p mksh-probe -- --shell windows-powershell   # PowerShell 5.1
 cargo run -p mksh-probe -- --shell cmd
 cargo run -p mksh-probe -- --shell pwsh --dump   # muestra cada fragmento y evento
 ```

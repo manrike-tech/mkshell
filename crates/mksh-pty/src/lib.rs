@@ -225,24 +225,46 @@ fn unix_kill_group(pid: libc::pid_t) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::mpsc::{Receiver, channel};
     use std::time::{Duration, Instant};
 
-    fn read_until(reader: &mut dyn Read, needle: &str, timeout: Duration) -> String {
-        let start = Instant::now();
-        let mut out = Vec::new();
-        let mut buf = [0u8; 4096];
-        while start.elapsed() < timeout {
-            match reader.read(&mut buf) {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
-                    out.extend_from_slice(&buf[..n]);
-                    if String::from_utf8_lossy(&out).contains(needle) {
+    /// Lee el PTY en un hilo aparte: una lectura bloqueada (p. ej. ConPTY,
+    /// que no da EOF hasta cerrarse) no puede colgar la prueba.
+    struct Output {
+        rx: Receiver<Vec<u8>>,
+        buf: Vec<u8>,
+    }
+
+    impl Output {
+        fn new(mut reader: Box<dyn Read + Send>) -> Self {
+            let (tx, rx) = channel();
+            std::thread::spawn(move || {
+                let mut buf = [0u8; 4096];
+                while let Ok(n) = reader.read(&mut buf) {
+                    if n == 0 || tx.send(buf[..n].to_vec()).is_err() {
                         break;
                     }
                 }
+            });
+            Self {
+                rx,
+                buf: Vec::new(),
             }
         }
-        String::from_utf8_lossy(&out).into_owned()
+
+        /// Espera hasta que el texto acumulado cumpla `pred` o venza el plazo.
+        fn wait_until(&mut self, pred: impl Fn(&str) -> bool) -> String {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            loop {
+                let text = String::from_utf8_lossy(&self.buf).into_owned();
+                if pred(&text) || Instant::now() > deadline {
+                    return text;
+                }
+                if let Ok(chunk) = self.rx.recv_timeout(Duration::from_millis(50)) {
+                    self.buf.extend_from_slice(&chunk);
+                }
+            }
+        }
     }
 
     #[cfg(unix)]
@@ -259,12 +281,13 @@ mod tests {
             rows: 24,
             ..Default::default()
         };
-        let (proc_, mut reader) = PtyProcess::spawn(&spec).unwrap();
-        let out = read_until(reader.as_mut(), "hola-pty", Duration::from_secs(5));
-        assert!(out.contains("hola-pty"), "salida: {out:?}");
+        let (proc_, reader) = PtyProcess::spawn(&spec).unwrap();
+        let mut out = Output::new(reader);
+        let text = out.wait_until(|t| t.contains("hola-pty"));
+        assert!(text.contains("hola-pty"), "salida: {text:?}");
         proc_.write_all(b"abc\r").unwrap();
-        let out = read_until(reader.as_mut(), "leido-abc", Duration::from_secs(5));
-        assert!(out.contains("leido-abc"), "salida: {out:?}");
+        let text = out.wait_until(|t| t.contains("leido-abc"));
+        assert!(text.contains("leido-abc"), "salida: {text:?}");
         assert_eq!(proc_.wait(), Some(0));
     }
 
@@ -278,9 +301,10 @@ mod tests {
             rows: 24,
             ..Default::default()
         };
-        let (proc_, mut reader) = PtyProcess::spawn(&spec).unwrap();
-        let out = read_until(reader.as_mut(), "\n", Duration::from_secs(5));
-        let child_pid: i32 = out
+        let (proc_, reader) = PtyProcess::spawn(&spec).unwrap();
+        let text = Output::new(reader)
+            .wait_until(|t| t.split("hijo=").nth(1).is_some_and(|r| r.contains('\n')));
+        let child_pid: i32 = text
             .split("hijo=")
             .nth(1)
             .and_then(|s| s.split_whitespace().next())
@@ -310,9 +334,66 @@ mod tests {
             rows: 24,
             ..Default::default()
         };
-        let (proc_, mut reader) = PtyProcess::spawn(&spec).unwrap();
-        let _ = read_until(reader.as_mut(), "listo", Duration::from_secs(5));
+        let (proc_, reader) = PtyProcess::spawn(&spec).unwrap();
+        let _ = Output::new(reader).wait_until(|t| t.contains("listo"));
         assert_eq!(proc_.echo_disabled(), Some(true));
         proc_.kill_tree();
+    }
+
+    /// ConPTY: lanzar, leer la salida, escribir y obtener el código de salida.
+    #[cfg(windows)]
+    #[test]
+    fn conpty_roundtrip() {
+        let comspec = std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".into());
+        let spec = SpawnSpec {
+            program: comspec,
+            args: vec!["/q".into(), "/k".into(), "echo mkshell-conpty".into()],
+            cols: 80,
+            rows: 24,
+            ..Default::default()
+        };
+        let (proc_, reader) = PtyProcess::spawn(&spec).unwrap();
+        let mut out = Output::new(reader);
+        let text = out.wait_until(|t| t.contains("mkshell-conpty"));
+        assert!(text.contains("mkshell-conpty"), "salida: {text:?}");
+        proc_.write_all(b"exit 7\r").unwrap();
+        assert_eq!(proc_.wait(), Some(7));
+        proc_.close();
+    }
+
+    /// Job Object: al cerrar el panel muere también un nieto.
+    #[cfg(windows)]
+    #[test]
+    fn job_object_kills_grandchildren() {
+        let comspec = std::env::var("ComSpec").unwrap_or_else(|_| "cmd.exe".into());
+        let spec = SpawnSpec {
+            program: comspec,
+            // `ping` hace de proceso largo hijo de cmd.
+            args: vec!["/c".into(), "ping -n 60 127.0.0.1 >nul".into()],
+            cols: 80,
+            rows: 24,
+            ..Default::default()
+        };
+        let (proc_, reader) = PtyProcess::spawn(&spec).unwrap();
+        let _out = Output::new(reader);
+        std::thread::sleep(Duration::from_millis(800));
+        let start = Instant::now();
+        proc_.kill_tree();
+        drop(proc_);
+        let pings = || {
+            std::process::Command::new("tasklist")
+                .args(["/FI", "IMAGENAME eq PING.EXE", "/NH"])
+                .output()
+                .map(|o| {
+                    String::from_utf8_lossy(&o.stdout)
+                        .to_ascii_lowercase()
+                        .contains("ping.exe")
+                })
+                .unwrap_or(false)
+        };
+        while pings() && start.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(200));
+        }
+        assert!(!pings(), "ping.exe sigue vivo tras cerrar el panel");
     }
 }

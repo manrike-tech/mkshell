@@ -130,6 +130,16 @@ pub fn slug(name: &str) -> String {
     let mut out = String::new();
     let mut dash = false;
     for c in name.chars().flat_map(|c| c.to_lowercase()) {
+        let c = match c {
+            'á' | 'à' | 'ä' | 'â' => 'a',
+            'é' | 'è' | 'ë' | 'ê' => 'e',
+            'í' | 'ì' | 'ï' | 'î' => 'i',
+            'ó' | 'ò' | 'ö' | 'ô' => 'o',
+            'ú' | 'ù' | 'ü' | 'û' => 'u',
+            'ñ' => 'n',
+            'ç' => 'c',
+            other => other,
+        };
         if c.is_ascii_alphanumeric() {
             out.push(c);
             dash = false;
@@ -163,6 +173,7 @@ mod tests {
     #[test]
     fn slugs() {
         assert_eq!(slug("WSL: Ubuntu 24.04"), "wsl-ubuntu-24-04");
+        assert_eq!(slug("Símbolo del sistema"), "simbolo-del-sistema");
         assert_eq!(slug("  "), "shell");
     }
 }

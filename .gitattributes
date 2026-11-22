@@ -1,0 +1,6 @@
+# Todo en LF: los scripts de integración se incrustan con include_str! y se
+# envían a shells remotos; un CRLF de un checkout en Windows los rompería.
+* text=auto eol=lf
+*.ps1 text eol=lf
+*.png binary
+*.ico binary

@@ -1,6 +1,8 @@
 //! Detección de shells instalados.
 
-use crate::{Profile, ShellKind};
+use crate::Profile;
+#[cfg(unix)]
+use crate::ShellKind;
 #[cfg(unix)]
 use std::path::Path;
 
@@ -54,6 +56,11 @@ pub(crate) fn detect_unix(env_shell: Option<&str>, etc_shells: Option<&str>) -> 
             continue;
         }
         let mut p = Profile::new(kind.label(), path, vec![]);
+        // Ids estables y cortos («bash», «zsh»…) para la configuración y `mksh-probe`.
+        p.id = match kind {
+            ShellKind::Posix => "sh".into(),
+            _ => p.id,
+        };
         p.integration = kind.supports_integration();
         profiles.push(p);
     }
@@ -68,23 +75,33 @@ pub(crate) fn detect_unix(env_shell: Option<&str>, etc_shells: Option<&str>) -> 
 fn detect_windows() -> Vec<Profile> {
     use std::path::PathBuf;
 
+    // Ids explícitos: estables aunque cambie el nombre mostrado.
+    let with_id = |mut p: Profile, id: &str| {
+        p.id = id.into();
+        p
+    };
     let mut profiles = Vec::new();
     if let Some(pwsh) = which("pwsh.exe") {
-        profiles.push(Profile::new("PowerShell", pwsh.to_string_lossy(), vec![]));
+        profiles.push(with_id(
+            Profile::new("PowerShell", pwsh.to_string_lossy(), vec![]),
+            "pwsh",
+        ));
     }
     let system_root = std::env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".into());
     let winps =
         PathBuf::from(&system_root).join("System32\\WindowsPowerShell\\v1.0\\powershell.exe");
     if winps.exists() {
-        profiles.push(Profile::new(
-            "Windows PowerShell",
-            winps.to_string_lossy(),
-            vec![],
+        profiles.push(with_id(
+            Profile::new("Windows PowerShell", winps.to_string_lossy(), vec![]),
+            "windows-powershell",
         ));
     }
     let cmd =
         std::env::var("ComSpec").unwrap_or_else(|_| format!("{system_root}\\System32\\cmd.exe"));
-    profiles.push(Profile::new("Símbolo del sistema", cmd, vec![]));
+    profiles.push(with_id(
+        Profile::new("Símbolo del sistema", cmd, vec![]),
+        "cmd",
+    ));
 
     for git_bash in [
         "C:\\Program Files\\Git\\bin\\bash.exe",

@@ -68,4 +68,4 @@ pnpm build                     # instaladores (deb, rpm, AppImage, MSI, NSIS)
 
 ## Licencia
 
-MIT o Apache-2.0, a elección.
+[MIT](LICENSE).
