@@ -1,0 +1,16 @@
+[package]
+name = "mksh-probe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+mksh-core = { version = "0.1.0", path = "../../crates/mksh-core" }
+mksh-session = { version = "0.1.0", path = "../../crates/mksh-session" }
+mksh-shell = { version = "0.1.0", path = "../../crates/mksh-shell" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+vte = "0.15.0"

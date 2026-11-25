@@ -1,0 +1,21 @@
+[package]
+name = "mksh-pty"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1.0.104"
+log = "0.4.35"
+portable-pty = "0.9.0"
+thiserror = "2.0.21"
+
+[target."cfg(unix)".dependencies]
+libc = "0.2.191"
+nix = { version = "0.28", default-features = false, features = ["term"] }
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }

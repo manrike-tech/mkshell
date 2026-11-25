@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-enable-blocks"
+description = "Enables the enable_blocks command without any pre-configured scope."
+commands.allow = ["enable_blocks"]
+
+[[permission]]
+identifier = "deny-enable-blocks"
+description = "Denies the enable_blocks command without any pre-configured scope."
+commands.deny = ["enable_blocks"]

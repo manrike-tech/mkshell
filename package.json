@@ -1,0 +1,11 @@
+{
+  "name": "mkshell-workspace",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "scripts": {
+    "dev": "pnpm --filter mkshell-desktop tauri dev",
+    "build": "pnpm --filter mkshell-desktop tauri build",
+    "check": "pnpm --filter mkshell-desktop check",
+    "test": "pnpm --filter mkshell-desktop test"
+  }
+}

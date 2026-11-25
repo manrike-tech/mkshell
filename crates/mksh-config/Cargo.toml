@@ -1,0 +1,18 @@
+[package]
+name = "mksh-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[dependencies]
+dirs = "7.0.0"
+log = "0.4.35"
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2.0.21"
+toml = "1.2.2"
+
+[dev-dependencies]
+mksh-core = { path = "../mksh-core" }

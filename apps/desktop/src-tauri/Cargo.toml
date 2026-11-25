@@ -1,0 +1,39 @@
+[package]
+name = "mkshell-desktop"
+description = "MKShell: terminal multiplataforma con sesiones, paneles e IA"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "mkshell_desktop"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "mkshell"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = "2"
+
+[dependencies]
+anyhow = "1.0.104"
+log = "0.4.35"
+mksh-config = { version = "0.1.0", path = "../../../crates/mksh-config" }
+mksh-core = { version = "0.1.0", path = "../../../crates/mksh-core" }
+mksh-session = { version = "0.1.0", path = "../../../crates/mksh-session" }
+mksh-shell = { version = "0.1.0", path = "../../../crates/mksh-shell" }
+mksh-store = { version = "0.1.0", path = "../../../crates/mksh-store" }
+parking_lot = "0.13.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tauri = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-dialog = "2"
+
+[features]
+# La CLI de Tauri lo activa en `tauri build`: sirve el frontend desde `dist`.
+custom-protocol = ["tauri/custom-protocol"]

@@ -1,0 +1,25 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mksh-core",
+    "crates/mksh-pty",
+    "crates/mksh-shell",
+    "crates/mksh-session",
+    "crates/mksh-config",
+    "crates/mksh-store",
+    "tools/mksh-probe",
+    "apps/desktop/src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+rust-version = "1.85"
+authors = ["Manrike-Tech"]
+repository = "https://github.com/manrike-tech/mkshell"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"

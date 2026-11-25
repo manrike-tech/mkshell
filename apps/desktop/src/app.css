@@ -1,0 +1,63 @@
+/* Estilos globales. Los colores vienen de lib/theme/themes.ts (variables CSS). */
+:root {
+  --bg: #0f1419;
+  --fg: #d7dde5;
+  --font-mono: 'JetBrains Mono', 'Cascadia Mono', 'DejaVu Sans Mono', Consolas, monospace;
+  --font-size: 13px;
+  --line-height: 1.2;
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, 'Segoe UI', Ubuntu, Cantarell, sans-serif;
+}
+:root[data-theme='mk-light'] {
+  color-scheme: light;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+}
+::selection {
+  background: var(--selection);
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* xterm.js: fondo transparente para integrarse en los bloques. */
+.xterm .xterm-viewport {
+  background-color: transparent !important;
+}
+
+/* Sugerencias del Command Input (se pintan en <body>). */
+.cm-tooltip.cm-tooltip-autocomplete {
+  background: var(--bg-elev);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  font-size: calc(var(--font-size) - 1px);
+}
+.cm-tooltip-autocomplete ul li[aria-selected] {
+  background: var(--accent-soft) !important;
+  color: var(--fg) !important;
+}
+.cm-completionDetail {
+  color: var(--fg-muted);
+  margin-left: 1em;
+}

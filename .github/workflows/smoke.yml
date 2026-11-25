@@ -1,0 +1,131 @@
+name: Smoke (desktop)
+
+# Arranca la app real en Windows (WebView2) y la maneja por CDP:
+#  - dev:     servidor Vite + binario debug sin custom-protocol (lo que hace `pnpm dev`)
+#  - bundled: `tauri build --debug --no-bundle` (frontend embebido, como el .exe final)
+# Sube capturas y registros como artefacto.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - name: WebView2 instalado
+        run: |
+          $keys = 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+                  'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
+          foreach ($k in $keys) { if (Test-Path $k) { "WebView2 $((Get-ItemProperty $k).pv) ($k)" } }
+
+      # WebView2 ignora WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS cuando la app ya pasa
+      # argumentos propios (wry lo hace), así que el puerto CDP se añade con una
+      # configuración de Tauri fusionada solo en esta prueba. La ventana se
+      # repite entera porque la fusión JSON sustituye los arrays.
+      - name: Configuración de la prueba
+        run: |
+          $cfg = @{ app = @{ windows = @(@{
+            label = 'main'; title = 'MKShell'; width = 1280; height = 800; minWidth = 640; minHeight = 400
+            additionalBrowserArgs = '--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9222'
+          }) } }
+          $cfg | ConvertTo-Json -Depth 6 | Set-Content "$env:RUNNER_TEMP\smoke.conf.json"
+          Get-Content "$env:RUNNER_TEMP\smoke.conf.json"
+
+      - name: Funciones de ayuda
+        run: |
+          @'
+          function Start-MkShell([string]$Name, [int]$Port) {
+            Get-Process mkshell, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
+            $env:MKSHELL_HOME = Join-Path $env:RUNNER_TEMP "mkhome-$Name"
+            New-Item -ItemType Directory -Force smoke | Out-Null
+            Start-Process -FilePath target\debug\mkshell.exe -PassThru `
+              -RedirectStandardOutput "smoke\$Name-stdout.log" -RedirectStandardError "smoke\$Name-stderr.log"
+          }
+          function Show-Diag([string]$Name, $Proc, [int]$Port) {
+            Write-Host "::group::diagnóstico $Name"
+            if ($Proc) { "mkshell.exe vivo: $(-not $Proc.HasExited)"; if ($Proc.HasExited) { "código de salida: $($Proc.ExitCode)" } }
+            Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" |
+              Select-Object -First 3 | ForEach-Object { "webview2: $($_.CommandLine)" }
+            netstat -ano | Select-String "LISTENING" | Select-String ":$Port\b"
+            Get-Content "smoke\$Name-*.log" -ErrorAction SilentlyContinue
+            Write-Host '::endgroup::'
+            try {
+              Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+              $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+              $bmp.Save((Join-Path (Resolve-Path smoke) "$Name-desktop.png"))
+            } catch { "sin captura de escritorio: $_" }
+          }
+          function Stop-MkShell($Proc) {
+            if ($Proc -and -not $Proc.HasExited) { Stop-Process -Id $Proc.Id -Force }
+            Get-Process mkshell, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
+          }
+          '@ | Set-Content "$env:RUNNER_TEMP\smoke-helpers.ps1"
+
+      - name: Modo dev (Vite + binario debug)
+        run: |
+          . "$env:RUNNER_TEMP\smoke-helpers.ps1"
+          $env:TAURI_CONFIG = Get-Content -Raw "$env:RUNNER_TEMP\smoke.conf.json"
+          cargo build -p mkshell-desktop
+          Remove-Item Env:TAURI_CONFIG
+          New-Item -ItemType Directory -Force smoke | Out-Null
+          $vite = Start-Process -FilePath pnpm.cmd -ArgumentList '--filter', 'mkshell-desktop', 'dev' -PassThru `
+            -RedirectStandardOutput smoke\vite-stdout.log -RedirectStandardError smoke\vite-stderr.log
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            try { Invoke-WebRequest http://localhost:1420 -UseBasicParsing -TimeoutSec 2 | Out-Null; $ok = $true } catch { Start-Sleep 1 }
+          }
+          if (-not $ok) { Get-Content smoke\vite-*.log; throw 'Vite no arrancó' }
+          $app = Start-MkShell dev 9222
+          node apps/desktop/scripts/smoke-cdp.mjs --port 9222 --out smoke/dev.png
+          $code = $LASTEXITCODE
+          Show-Diag dev $app 9222
+          Stop-MkShell $app
+          Stop-Process -Id $vite.Id -Force -ErrorAction SilentlyContinue
+          Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          exit $code
+
+      - name: Modo empaquetado (tauri build --debug --no-bundle)
+        if: always()
+        run: |
+          . "$env:RUNNER_TEMP\smoke-helpers.ps1"
+          pnpm --filter mkshell-desktop tauri build --debug --no-bundle --config "$env:RUNNER_TEMP\smoke.conf.json"
+          if ($LASTEXITCODE -ne 0) { throw 'tauri build falló' }
+          $app = Start-MkShell bundled 9222
+          node apps/desktop/scripts/smoke-cdp.mjs --port 9222 --out smoke/bundled.png
+          $code = $LASTEXITCODE
+          Show-Diag bundled $app 9222
+          Stop-MkShell $app
+          exit $code
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-windows
+          path: smoke/
+          if-no-files-found: warn
