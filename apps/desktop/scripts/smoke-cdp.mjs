@@ -40,7 +40,7 @@ const page = await waitFor(
     const list = await res.json();
     return list.find((t) => t.type === 'page' && !t.url.startsWith('devtools://') && t.url !== 'about:blank');
   },
-  90_000,
+  60_000,
 );
 console.log(`página: ${page.url}`);
 

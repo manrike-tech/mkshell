@@ -53,6 +53,22 @@ jobs:
             Start-Process -FilePath target\debug\mkshell.exe -PassThru `
               -RedirectStandardOutput "smoke\$Name-stdout.log" -RedirectStandardError "smoke\$Name-stderr.log"
           }
+          function Show-Diag([string]$Name, $Proc, [int]$Port) {
+            Write-Host "::group::diagnóstico $Name"
+            if ($Proc) { "mkshell.exe vivo: $(-not $Proc.HasExited)"; if ($Proc.HasExited) { "código de salida: $($Proc.ExitCode)" } }
+            Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" |
+              Select-Object -First 3 | ForEach-Object { "webview2: $($_.CommandLine)" }
+            netstat -ano | Select-String "LISTENING" | Select-String ":$Port\b"
+            Get-Content "smoke\$Name-*.log" -ErrorAction SilentlyContinue
+            Write-Host '::endgroup::'
+            try {
+              Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+              $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+              $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+              [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+              $bmp.Save((Join-Path (Resolve-Path smoke) "$Name-desktop.png"))
+            } catch { "sin captura de escritorio: $_" }
+          }
           function Stop-MkShell($Proc) {
             if ($Proc -and -not $Proc.HasExited) { Stop-Process -Id $Proc.Id -Force }
             Get-Process mkshell, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
@@ -74,10 +90,10 @@ jobs:
           $app = Start-MkShell dev 9222
           node apps/desktop/scripts/smoke-cdp.mjs --port 9222 --out smoke/dev.png
           $code = $LASTEXITCODE
+          Show-Diag dev $app 9222
           Stop-MkShell $app
           Stop-Process -Id $vite.Id -Force -ErrorAction SilentlyContinue
           Get-Process node -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-          Write-Host '::group::registros de la app'; Get-Content smoke\dev-*.log; Write-Host '::endgroup::'
           exit $code
 
       - name: Modo empaquetado (tauri build --debug --no-bundle)
@@ -89,8 +105,8 @@ jobs:
           $app = Start-MkShell bundled 9223
           node apps/desktop/scripts/smoke-cdp.mjs --port 9223 --out smoke/bundled.png
           $code = $LASTEXITCODE
+          Show-Diag bundled $app 9223
           Stop-MkShell $app
-          Write-Host '::group::registros de la app'; Get-Content smoke\bundled-*.log; Write-Host '::endgroup::'
           exit $code
 
       - uses: actions/upload-artifact@v4
