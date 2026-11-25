@@ -21,6 +21,17 @@ pnpm test                            # vitest
 pnpm build                           # tauri build (instaladores)
 ```
 
+`pnpm dev` y `pnpm build` se lanzan **desde la raíz**: ahí invocan `tauri dev` /
+`tauri build`. En `apps/desktop` los mismos nombres solo arrancan/compilan Vite.
+La interfaz funciona únicamente dentro de la ventana de MKShell; abierta en un
+navegador (`http://localhost:1420`) no hay puente IPC y muestra un diagnóstico
+con la URL y el contenedor.
+
+| Ejecutable | Qué carga | Requisito |
+|---|---|---|
+| `target\debug\mkshell.exe` de `pnpm dev` o `cargo build` | `http://localhost:1420` | Vite en marcha |
+| `target\release\mkshell.exe` o instalador de `pnpm build` | `dist/` embebido | ninguno |
+
 Para aislar la configuración durante el desarrollo:
 
 ```bash
@@ -66,6 +77,16 @@ DISPLAY=:99 MKSHELL_HOME=/tmp/mk WEBKIT_DISABLE_DMABUF_RENDERER=1 \
 
 Para que una build de depuración sirva `dist/` en lugar de Vite:
 `cargo build -p mkshell-desktop --features custom-protocol` (tras `pnpm --filter mkshell-desktop build`).
+
+### Prueba de humo en Windows (`.github/workflows/smoke.yml`)
+
+Arranca la app real en WebView2 en modo dev (Vite + binario debug) y empaquetado
+(`tauri build --debug --no-bundle`), la maneja por CDP con
+`apps/desktop/scripts/smoke-cdp.mjs` (ejecuta `echo mkshell-smoke` desde el
+Command Input y comprueba el bloque) y sube capturas. WebView2 ignora
+`WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS` porque wry ya pasa argumentos propios,
+así que el puerto CDP se añade con `additionalBrowserArgs` en una configuración
+fusionada (`TAURI_CONFIG` / `--config`) solo para la prueba.
 
 ## Añadir un comando IPC
 
