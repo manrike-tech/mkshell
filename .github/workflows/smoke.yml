@@ -42,12 +42,24 @@ jobs:
                   'HKCU:\Software\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}'
           foreach ($k in $keys) { if (Test-Path $k) { "WebView2 $((Get-ItemProperty $k).pv) ($k)" } }
 
+      # WebView2 ignora WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS cuando la app ya pasa
+      # argumentos propios (wry lo hace), así que el puerto CDP se añade con una
+      # configuración de Tauri fusionada solo en esta prueba. La ventana se
+      # repite entera porque la fusión JSON sustituye los arrays.
+      - name: Configuración de la prueba
+        run: |
+          $cfg = @{ app = @{ windows = @(@{
+            label = 'main'; title = 'MKShell'; width = 1280; height = 800; minWidth = 640; minHeight = 400
+            additionalBrowserArgs = '--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --remote-debugging-port=9222'
+          }) } }
+          $cfg | ConvertTo-Json -Depth 6 | Set-Content "$env:RUNNER_TEMP\smoke.conf.json"
+          Get-Content "$env:RUNNER_TEMP\smoke.conf.json"
+
       - name: Funciones de ayuda
         run: |
           @'
           function Start-MkShell([string]$Name, [int]$Port) {
             Get-Process mkshell, msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force
-            $env:WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS = "--remote-debugging-port=$Port"
             $env:MKSHELL_HOME = Join-Path $env:RUNNER_TEMP "mkhome-$Name"
             New-Item -ItemType Directory -Force smoke | Out-Null
             Start-Process -FilePath target\debug\mkshell.exe -PassThru `
@@ -78,7 +90,9 @@ jobs:
       - name: Modo dev (Vite + binario debug)
         run: |
           . "$env:RUNNER_TEMP\smoke-helpers.ps1"
+          $env:TAURI_CONFIG = Get-Content -Raw "$env:RUNNER_TEMP\smoke.conf.json"
           cargo build -p mkshell-desktop
+          Remove-Item Env:TAURI_CONFIG
           New-Item -ItemType Directory -Force smoke | Out-Null
           $vite = Start-Process -FilePath pnpm.cmd -ArgumentList '--filter', 'mkshell-desktop', 'dev' -PassThru `
             -RedirectStandardOutput smoke\vite-stdout.log -RedirectStandardError smoke\vite-stderr.log
@@ -100,12 +114,12 @@ jobs:
         if: always()
         run: |
           . "$env:RUNNER_TEMP\smoke-helpers.ps1"
-          pnpm --filter mkshell-desktop tauri build --debug --no-bundle
+          pnpm --filter mkshell-desktop tauri build --debug --no-bundle --config "$env:RUNNER_TEMP\smoke.conf.json"
           if ($LASTEXITCODE -ne 0) { throw 'tauri build falló' }
-          $app = Start-MkShell bundled 9223
-          node apps/desktop/scripts/smoke-cdp.mjs --port 9223 --out smoke/bundled.png
+          $app = Start-MkShell bundled 9222
+          node apps/desktop/scripts/smoke-cdp.mjs --port 9222 --out smoke/bundled.png
           $code = $LASTEXITCODE
-          Show-Diag bundled $app 9223
+          Show-Diag bundled $app 9222
           Stop-MkShell $app
           exit $code
 
