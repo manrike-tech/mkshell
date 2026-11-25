@@ -17,6 +17,34 @@ export interface ConsentRequest {
   remember: boolean;
 }
 
+/**
+ * Comprueba que la página corre dentro de la ventana de Tauri (scripts de
+ * inicialización con `__TAURI_INTERNALS__`). Devuelve un diagnóstico legible si
+ * no es así: la causa típica es abrir `http://localhost:1420` en un navegador.
+ */
+function missingBridge(): string | null {
+  const w = window as unknown as {
+    __TAURI_INTERNALS__?: { invoke?: unknown };
+    isTauri?: boolean;
+    chrome?: { webview?: unknown };
+    webkit?: { messageHandlers?: unknown };
+  };
+  if (typeof w.__TAURI_INTERNALS__?.invoke === 'function') return null;
+  const host = w.chrome?.webview ? 'WebView2' : w.webkit?.messageHandlers ? 'WebKitGTK' : 'navegador (no es una ventana de Tauri)';
+  return [
+    'El puente IPC de Tauri no está disponible en esta página.',
+    '',
+    `URL:        ${location.href}`,
+    `Contenedor: ${host}`,
+    `isTauri:    ${w.isTauri === true ? 'sí' : 'no'}`,
+    `__TAURI_INTERNALS__: ${typeof w.__TAURI_INTERNALS__}`,
+    `User-Agent: ${navigator.userAgent}`,
+    '',
+    'Si estás en un navegador: la interfaz solo funciona dentro de la ventana de MKShell',
+    '(`pnpm dev` desde la raíz del repositorio la abre automáticamente).',
+  ].join('\n');
+}
+
 class AppStore implements PaneHost {
   boot = $state<Bootstrap | null>(null);
   error = $state<string | null>(null);
@@ -47,6 +75,11 @@ class AppStore implements PaneHost {
   // ───────────────────────── arranque ─────────────────────────
 
   async init() {
+    const missing = missingBridge();
+    if (missing) {
+      this.error = missing;
+      return;
+    }
     try {
       const boot = await api.bootstrap();
       const a = boot.config.appearance;
